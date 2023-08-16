@@ -46,6 +46,11 @@ DATA_DIR ?= $(PREFIX)/share/sameboy/
 FREEDESKTOP ?= true
 endif
 
+LIBTRACE_DIR=bap-frames/libtrace
+LIBTRACE_BUILD_DIR=build/libtrace
+LIBTRACE_BUILD_DIR_TO_SRC=../../$(LIBTRACE_DIR)
+LIBTRACE=$(LIBTRACE_BUILD_DIR)/src/libtrace.a
+
 default: $(DEFAULT)
 
 ifeq ($(MAKECMDGOALS),)
@@ -719,6 +724,21 @@ $(INC)/%.h: Core/%.h
 lib-unsupported:
 	@echo Due to limitations of lld-link, compiling SameBoy as a library on Windows is not supported.
 	@false
+
+.PHONY: bap-frames
+bap-frames: $(LIBTRACE)
+
+$(LIBTRACE_DIR)/configure: $(LIBTRACE_DIR)/configure.ac $(LIBTRACE_DIR)/Makefile.am $(LIBTRACE_DIR)/src/Makefile.am
+	cd $(LIBTRACE_DIR) && ./autogen.sh
+
+$(LIBTRACE_BUILD_DIR)/Makefile: $(LIBTRACE_DIR)/configure
+	mkdir -p $(LIBTRACE_BUILD_DIR) || exit 1; \
+	if ! PROTOBUF_CFLAGS=$$(pkg-config --cflags protobuf); then exit 1; fi; \
+	if ! PROTOBUF_LIBS=$$(pkg-config --libs protobuf); then exit 1; fi; \
+	cd $(LIBTRACE_BUILD_DIR) && CXXFLAGS="$${PROTOBUF_CFLAGS} -std=c++11" LDFLAGS="$${PROTOBUF_LIBS}" $(LIBTRACE_BUILD_DIR_TO_SRC)/configure
+
+$(LIBTRACE): $(LIBTRACE_BUILD_DIR)/Makefile
+	make -C"$(LIBTRACE_BUILD_DIR)"
 	
 # Clean
 clean:
