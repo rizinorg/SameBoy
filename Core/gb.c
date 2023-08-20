@@ -2127,3 +2127,11 @@ void GB_clear_running_thread(GB_gameboy_t *gb)
     gb->running_thread_id = NULL;
 }
 #endif
+
+#ifdef ENABLE_BAP_FRAMES
+GB_trace_state_t **GB_trace_member(GB_gameboy_t *gb)
+{
+    // workaround because there are some alignment differences between the C and C++ code
+    return &gb->trace;
+}
+#endif

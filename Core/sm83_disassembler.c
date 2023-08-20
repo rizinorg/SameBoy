@@ -788,3 +788,22 @@ void GB_cpu_disassemble(GB_gameboy_t *gb, uint16_t pc, uint16_t count)
         opcodes[opcode](gb, opcode, &pc);
     }
 }
+
+static void log_silent(GB_gameboy_t *gb, const char *string, GB_log_attributes attributes)
+{
+}
+
+uint16_t GB_cpu_opsize(GB_gameboy_t *gb, uint16_t pc)
+{
+    // Hack that uses the textual disassembly callbacks to calculate the op size
+    uint8_t opcode = GB_read_memory(gb, pc);
+    uint16_t pc_next = pc;
+    GB_log_callback_t log_tmp = gb->log_callback;
+    gb->log_callback = log_silent;
+    opcodes[opcode](gb, opcode, &pc_next);
+    gb->log_callback = log_tmp;
+    if (pc_next < pc) {
+        return 0;
+    }
+    return pc_next - pc;
+}

@@ -1753,7 +1753,27 @@ void GB_cpu_run(GB_gameboy_t *gb)
             gb->pc--;
             gb->halt_bug = false;
         }
+#ifdef ENABLE_BAP_FRAMES
+        if (gb->trace) {
+           uint16_t opsize = GB_cpu_opsize(gb, gb->pc - 1);
+           uint8_t op[4];
+           assert(opsize <= sizeof(op));
+           if (!opsize) {
+               opsize = 1;
+           }
+           op[0] = opcode;
+           for (size_t i = 1; i < opsize; i++) {
+               op[i] = GB_read_memory(gb, gb->pc - 1 + i);
+           }
+           GB_trace_frame_begin(gb, gb->pc - 1, op, opsize);
+        }
+#endif
         opcodes[opcode](gb, opcode);
+#ifdef ENABLE_BAP_FRAMES
+        if (gb->trace) {
+            GB_trace_frame_end(gb);
+        }
+#endif
     }
     
     flush_pending_cycles(gb);
