@@ -224,6 +224,11 @@ void GB_free(GB_gameboy_t *gb)
     }
 #endif
     GB_rewind_reset(gb);
+#ifdef ENABLE_BAP_FRAMES
+    if (gb->trace) {
+        GB_trace_close(gb);
+    }
+#endif
 #ifndef GB_DISABLE_CHEATS
     while (gb->cheats) {
         GB_remove_cheat(gb, gb->cheats[0]);

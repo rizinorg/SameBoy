@@ -2118,6 +2118,31 @@ retry:;
 }
 #endif
 
+#ifdef ENABLE_BAP_FRAMES
+static bool bapframeso(GB_gameboy_t *gb, char *arguments, char *modifiers, const debugger_command_t *command)
+{
+    NO_MODIFIERS
+    const char *filename = lstrip(arguments);
+    if (!*filename) {
+        print_usage(gb, command);
+        return true;
+    }
+    GB_trace_open(gb, filename);
+    return true;
+}
+
+static bool bapframesc(GB_gameboy_t *gb, char *arguments, char *modifiers, const debugger_command_t *command)
+{
+    NO_MODIFIERS
+    if (*lstrip(arguments)) {
+        print_usage(gb, command);
+        return true;
+    }
+    GB_trace_close(gb);
+    return true;
+}
+#endif
+
 static bool help(GB_gameboy_t *gb, char *arguments, char *modifiers, const debugger_command_t *command);
 
 
@@ -2179,6 +2204,14 @@ static const debugger_command_t commands[] = {
     {"dma", 3, dma, "Display the current OAM DMA status"},
 
     {"help", 1, help, "List available commands or show help for the specified command", "[<command>]"},
+
+#ifdef ENABLE_BAP_FRAMES
+    {"bapframeso", 4, bapframeso, "Open bap-frames trace file and start tracing", "<filename>"},
+    {"bapo", 4, }, /* Alias */
+    {"bapframesc", 4, bapframesc, "Stop tracing and close bap-frames trace file"},
+    {"bapc", 4, }, /* Alias */
+#endif
+
     {NULL,}, /* Null terminator */
 };
 

@@ -25,6 +25,7 @@
 #include "rumble.h"
 #include "workboy.h"
 #include "random.h"
+#include "trace.h"
 
 #define GB_STRUCT_VERSION 15
 
@@ -787,6 +788,10 @@ struct GB_gameboy_internal_s {
         } *rewind_sequences; // lasts about 4 seconds
         size_t rewind_pos;
         bool rewind_disable_invalidation;
+#endif
+
+#ifdef ENABLE_BAP_FRAMES
+        GB_trace_state_t *trace;
 #endif
                
         /* SGB - saved and allocated optionally */

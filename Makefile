@@ -50,6 +50,7 @@ LIBTRACE_DIR=bap-frames/libtrace
 LIBTRACE_BUILD_DIR=build/libtrace
 LIBTRACE_BUILD_DIR_TO_SRC=../../$(LIBTRACE_DIR)
 LIBTRACE=$(LIBTRACE_BUILD_DIR)/src/libtrace.a
+ENABLE_BAP_FRAMES ?= 1
 
 default: $(DEFAULT)
 
@@ -219,6 +220,18 @@ GL_CFLAGS := $(shell $(PKG_CONFIG) --cflags gl)
 GL_LDFLAGS := $(shell $(PKG_CONFIG) --libs gl || echo -lGL)
 endif
 
+ifeq ($(ENABLE_BAP_FRAMES),1)
+CFLAGS += -I$(LIBTRACE_BUILD_DIR)/src -I$(LIBTRACE_DIR)/src -DENABLE_BAP_FRAMES
+ifneq ($(shell pkg-config --exists protobuf && echo 0),0)
+$(error protobuf not found with pkg-config)
+endif
+PROTOBUF_CFLAGS := $(shell pkg-config --cflags protobuf)
+PROTOBUF_LDFLAGS := $(shell pkg-config --libs protobuf)
+LDFLAGS += $(PROTOBUF_LDFLAGS)
+else
+CORE_FILTER += Core/trace.cpp
+endif
+
 ifeq ($(PLATFORM),windows32)
 CFLAGS += -IWindows -Drandom=rand --target=i386-pc-windows
 LDFLAGS += -lmsvcrt -lcomdlg32 -luser32 -lshell32 -lole32 -lSDL2main -Wl,/MANIFESTFILE:NUL --target=i386-pc-windows
@@ -330,7 +343,7 @@ endif
 
 # Get a list of our source files and their respective object file targets
 
-CORE_SOURCES := $(filter-out $(CORE_FILTER),$(shell ls Core/*.c))
+CORE_SOURCES := $(filter-out $(CORE_FILTER),$(shell ls Core/*.c) $(shell ls Core/*.cpp))
 CORE_HEADERS := $(shell ls Core/*.h)
 SDL_SOURCES := $(shell ls SDL/*.c) $(OPEN_DIALOG) $(patsubst %,SDL/audio/%.c,$(SDL_AUDIO_DRIVERS))
 TESTER_SOURCES := $(shell ls Tester/*.c)
@@ -370,6 +383,12 @@ ifneq ($(filter $(MAKECMDGOALS),_ios),)
 endif
 endif
 
+ifeq ($(ENABLE_BAP_FRAMES),1)
+CORE_OBJECTS += $(LIBTRACE)
+endif
+
+CXXFLAGS=-std=c++11 $(filter-out -std=gnu11,$(CFLAGS))
+
 $(OBJ)/SDL/%.dep: SDL/%
 	-@$(MKDIR) -p $(dir $@)
 	$(CC) $(CFLAGS) $(SDL_CFLAGS) $(GL_CFLAGS) -MT $(OBJ)/$^.o -M $^ -c -o $@
@@ -378,15 +397,25 @@ $(OBJ)/OpenDialog/%.dep: OpenDialog/%
 	-@$(MKDIR) -p $(dir $@)
 	$(CC) $(CFLAGS) $(SDL_CFLAGS) $(GL_CFLAGS) -MT $(OBJ)/$^.o -M $^ -c -o $@
 
-$(OBJ)/%.dep: %
+$(OBJ)/%.c.dep: %
 	-@$(MKDIR) -p $(dir $@)
 	$(CC) $(CFLAGS) -MT $(OBJ)/$^.o -M $^ -c -o $@
+
+$(OBJ)/%.cpp.dep: %
+	-@$(MKDIR) -p $(dir $@)
+	$(CXX) $(CXXFLAGS) -MT $(OBJ)/$^.o -M $^ -c -o $@
 
 # Compilation rules
 
 $(OBJ)/Core/%.c.o: Core/%.c
 	-@$(MKDIR) -p $(dir $@)
 	$(CC) $(CFLAGS) $(FAT_FLAGS) -DGB_INTERNAL -c $< -o $@
+
+$(OBJ)/Core/%.cpp.o: Core/%.cpp
+	-@$(MKDIR) -p $(dir $@)
+	$(CXX) $(PROTOBUF_CFLAGS) $(CXXFLAGS) $(FAT_FLAGS) -DGB_INTERNAL -c $< -o $@
+
+$(OBJ)/Core/trace.cpp.o: $(LIBTRACE)
 
 $(OBJ)/SDL/%.c.o: SDL/%.c
 	-@$(MKDIR) -p $(dir $@)
@@ -473,7 +502,7 @@ endif
 
 $(BIN)/SameBoy.app/Contents/MacOS/SameBoy: $(CORE_OBJECTS) $(COCOA_OBJECTS)
 	-@$(MKDIR) -p $(dir $@)
-	$(CC) $^ -o $@ $(LDFLAGS) $(FAT_FLAGS) -framework OpenGL -framework AudioToolbox -framework AudioUnit -framework AVFoundation -framework CoreVideo -framework CoreMedia -framework IOKit -framework PreferencePanes -framework Carbon -framework QuartzCore -framework Security -framework WebKit -weak_framework Metal -weak_framework MetalKit
+	$(CXX) $^ -o $@ $(LDFLAGS) $(FAT_FLAGS) -framework OpenGL -framework AudioToolbox -framework AudioUnit -framework AVFoundation -framework CoreVideo -framework CoreMedia -framework IOKit -framework PreferencePanes -framework Carbon -framework QuartzCore -framework Security -framework WebKit -weak_framework Metal -weak_framework MetalKit
 ifeq ($(CONF), release)
 	$(STRIP) $@
 endif
@@ -498,7 +527,7 @@ endif
 # once in the QL Generator. It should probably become a dylib instead.
 $(BIN)/SameBoy.qlgenerator/Contents/MacOS/SameBoyQL: $(CORE_OBJECTS) $(QUICKLOOK_OBJECTS)
 	-@$(MKDIR) -p $(dir $@)
-	$(CC) $^ -o $@ $(LDFLAGS) $(FAT_FLAGS) -Wl,-exported_symbols_list,QuickLook/exports.sym -bundle -framework Cocoa -framework Quicklook
+	$(CXX) $^ -o $@ $(LDFLAGS) $(FAT_FLAGS) -Wl,-exported_symbols_list,QuickLook/exports.sym -bundle -framework Cocoa -framework Quicklook
 ifeq ($(CONF), release)
 	$(STRIP) $@
 endif
@@ -514,7 +543,7 @@ $(BIN)/SameBoy.qlgenerator/Contents/Resources/cgb_boot_fast.bin: $(BIN)/BootROMs
 # Unix versions build only one binary
 $(BIN)/SDL/sameboy: $(CORE_OBJECTS) $(SDL_OBJECTS)
 	-@$(MKDIR) -p $(dir $@)
-	$(CC) $^ -o $@ $(LDFLAGS) $(FAT_FLAGS) $(SDL_LDFLAGS) $(GL_LDFLAGS)
+	$(CXX) $^ -o $@ $(LDFLAGS) $(FAT_FLAGS) $(SDL_LDFLAGS) $(GL_LDFLAGS)
 ifeq ($(CONF), release)
 	$(STRIP) $@
 	$(CODESIGN) $@
@@ -732,10 +761,8 @@ $(LIBTRACE_DIR)/configure: $(LIBTRACE_DIR)/configure.ac $(LIBTRACE_DIR)/Makefile
 	cd $(LIBTRACE_DIR) && ./autogen.sh
 
 $(LIBTRACE_BUILD_DIR)/Makefile: $(LIBTRACE_DIR)/configure
-	mkdir -p $(LIBTRACE_BUILD_DIR) || exit 1; \
-	if ! PROTOBUF_CFLAGS=$$(pkg-config --cflags protobuf); then exit 1; fi; \
-	if ! PROTOBUF_LIBS=$$(pkg-config --libs protobuf); then exit 1; fi; \
-	cd $(LIBTRACE_BUILD_DIR) && CXXFLAGS="$${PROTOBUF_CFLAGS} -std=c++11" LDFLAGS="$${PROTOBUF_LIBS}" $(LIBTRACE_BUILD_DIR_TO_SRC)/configure
+	mkdir -p $(LIBTRACE_BUILD_DIR)
+	cd $(LIBTRACE_BUILD_DIR) && CXXFLAGS="$(PROTOBUF_CFLAGS) -std=c++11" LDFLAGS="$(PROTOBUF_LDFLAGS)" $(LIBTRACE_BUILD_DIR_TO_SRC)/configure
 
 $(LIBTRACE): $(LIBTRACE_BUILD_DIR)/Makefile
 	make -C"$(LIBTRACE_BUILD_DIR)"
