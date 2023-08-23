@@ -1608,6 +1608,41 @@ static void cb_prefix(GB_gameboy_t *gb, uint8_t opcode)
     }
 }
 
+#ifdef ENABLE_BAP_FRAMES
+static void trace_dump_regs(GB_gameboy_t *gb, bool post)
+{
+    // can't observe which registers were actually used, so we always dump all of them (except unchanged)
+    if (!post || (gb->af & 0xff00) != (gb->trace_regs_pre.af & 0xff00)) {
+        GB_trace_push_reg(gb, post, "a", gb->af >> 8, 8);
+    }
+    if (!post || (gb->af & 0xff) != (gb->trace_regs_pre.af & 0xff)) {
+        GB_trace_push_reg(gb, post, "f", gb->af & 0xff, 8);
+    }
+    if (!post || (gb->bc & 0xff00) != (gb->trace_regs_pre.bc & 0xff00)) {
+        GB_trace_push_reg(gb, post, "b", gb->bc >> 8, 8);
+    }
+    if (!post || (gb->bc & 0xff) != (gb->trace_regs_pre.bc & 0xff)) {
+        GB_trace_push_reg(gb, post, "c", gb->bc & 0xff, 8);
+    }
+    if (!post || (gb->de & 0xff00) != (gb->trace_regs_pre.de & 0xff00)) {
+        GB_trace_push_reg(gb, post, "d", gb->de >> 8, 8);
+    }
+    if (!post || (gb->de & 0xff) != (gb->trace_regs_pre.de & 0xff)) {
+        GB_trace_push_reg(gb, post, "e", gb->de & 0xff, 8);
+    }
+    if (!post || (gb->hl & 0xff00) != (gb->trace_regs_pre.hl & 0xff00)) {
+        GB_trace_push_reg(gb, post, "h", gb->hl >> 8, 8);
+    }
+    if (!post || (gb->hl & 0xff) != (gb->trace_regs_pre.hl & 0xff)) {
+        GB_trace_push_reg(gb, post, "l", gb->hl & 0xff, 8);
+    }
+    GB_trace_push_reg(gb, post, "pc", gb->pc, 16);
+    if (!post || gb->sp != gb->trace_regs_pre.sp) {
+        GB_trace_push_reg(gb, post, "sp", gb->sp, 16);
+    }
+}
+#endif
+
 static opcode_t *opcodes[256] = {
 /*  X0          X1          X2          X3          X4          X5          X6          X7                */
 /*  X8          X9          Xa          Xb          Xc          Xd          Xe          Xf                */
@@ -1765,12 +1800,17 @@ void GB_cpu_run(GB_gameboy_t *gb)
            for (size_t i = 1; i < opsize; i++) {
                op[i] = GB_read_memory(gb, gb->pc - 1 + i);
            }
+           memcpy(gb->trace_regs_pre.registers, gb->registers, sizeof(gb->registers));
            GB_trace_frame_begin(gb, gb->pc - 1, op, opsize);
+           gb->trace_frame_open = true;
+           trace_dump_regs(gb, false);
         }
 #endif
         opcodes[opcode](gb, opcode);
 #ifdef ENABLE_BAP_FRAMES
         if (gb->trace) {
+            trace_dump_regs(gb, true);
+            gb->trace_frame_open = false;
             GB_trace_frame_end(gb);
         }
 #endif

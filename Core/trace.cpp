@@ -9,6 +9,8 @@ struct GB_trace_state_t
     uint16_t pc;
     uint8_t op[4];
     size_t op_size;
+    operand_value_list *pre;
+    operand_value_list *post;
 };
 
 // If we would include gb.h, the GB_gameboy_t would have a different layout than in C for some reason.
@@ -87,30 +89,25 @@ extern "C" void GB_trace_frame_begin(GB_gameboy_t *gb, uint16_t pc, uint8_t *op,
     t->pc = pc;
     memcpy(t->op, op, sz);
     t->op_size = sz;
+    t->pre = new operand_value_list();
+    t->post = new operand_value_list();
+    t->frame_started = true;
 }
 
 extern "C" void GB_trace_frame_end(GB_gameboy_t *gb)
 {
     auto t = *GB_trace_member(gb);
-    if (t->frame_started) {
+    if (!t->frame_started) {
         GB_log(gb, "No frame started!\n");
         return;
     }
-
-    operand_value_list *pre = new operand_value_list();
-    // push_regs(pre, &tf->pre.regs, true, false, nullptr);
-    // push_mems(pre, tf->pre.mems, tf->pre.mems_count, true, false);
-
-    operand_value_list *post = new operand_value_list();
-    // push_regs(post, &tf->post.regs, false, true, &tf->pre.regs);
-    // push_mems(post, tf->post.mems, tf->post.mems_count, false, true);
 
     std_frame *sf = new std_frame();
     sf->set_address(t->pc);
     sf->set_thread_id(0);
     sf->set_rawbytes(std::string((const char *)t->op, t->op_size));
-    sf->set_allocated_operand_pre_list(pre);
-    sf->set_allocated_operand_post_list(post);
+    sf->set_allocated_operand_pre_list(t->pre);
+    sf->set_allocated_operand_post_list(t->post);
 
     frame f;
     f.set_allocated_std_frame(sf);
@@ -118,4 +115,66 @@ extern "C" void GB_trace_frame_end(GB_gameboy_t *gb)
     t->writer->add(f);
     t->frame_started = false;
 }
+
+extern "C" void GB_trace_push_reg(GB_gameboy_t *gb, bool post, const char *name, uint16_t v, size_t bits)
+{
+    auto t = *GB_trace_member(gb);
+    if (!t->frame_started) {
+        GB_log(gb, "No frame started!\n");
+        return;
+    }
+    auto l = post ? t->post : t->pre;
+
+    reg_operand *ro = new reg_operand();
+    ro->set_name(name);
+    operand_info_specific *s = new operand_info_specific();
+    s->set_allocated_reg_operand(ro);
+
+    operand_usage *u = new operand_usage();
+    u->set_read(!post);
+    u->set_written(post);
+    u->set_index(false);
+    u->set_base(false);
+
+    taint_info *ti = new taint_info();
+
+    operand_info *i = l->add_elem();
+    i->set_allocated_operand_info_specific(s);
+    i->set_bit_length((int32_t)bits);
+    i->set_allocated_operand_usage(u);
+    i->set_allocated_taint_info(ti);
+    uint8_t va[2] = { (uint8_t)v, (uint8_t)(v >> 8) };
+    i->set_value(std::string((const char *)va, bits / 8));
+}
+
+extern "C" void GB_trace_push_mem(GB_gameboy_t *gb, bool post, uint16_t addr, uint8_t val)
+{
+    auto t = *GB_trace_member(gb);
+    if (!t->frame_started) {
+        GB_log(gb, "No frame started!\n");
+        return;
+    }
+    auto l = post ? t->post : t->pre;
+
+    mem_operand *mo = new mem_operand();
+    mo->set_address(addr);
+    operand_info_specific *s = new operand_info_specific();
+    s->set_allocated_mem_operand(mo);
+
+    operand_usage *u = new operand_usage();
+    u->set_read(!post);
+    u->set_written(post);
+    u->set_index(false);
+    u->set_base(false);
+
+    taint_info *ti = new taint_info();
+
+    operand_info *i = l->add_elem();
+    i->set_allocated_operand_info_specific(s);
+    i->set_bit_length(8);
+    i->set_allocated_operand_usage(u);
+    i->set_allocated_taint_info(ti);
+    i->set_value(std::string((const char *)&val, 1));
+}
+
 #endif

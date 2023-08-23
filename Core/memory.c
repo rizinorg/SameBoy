@@ -765,10 +765,12 @@ uint8_t GB_read_memory(GB_gameboy_t *gb, uint16_t addr)
         GB_debugger_test_read_watchpoint(gb, addr);
     }
 #endif
+    uint8_t data;
     if (unlikely(is_addr_in_dma_use(gb, addr))) {
         if (GB_is_cgb(gb) && bus_for_addr(gb, addr) == GB_BUS_MAIN && gb->dma_current_src >= 0xE000) {
             /* This is cart specific! Everdrive 7X on a CGB-A or 0 behaves differently. */
-            return 0xFF;
+            data = 0xFF;
+            goto ret;
         }
 
         if (GB_is_cgb(gb) && bus_for_addr(gb, gb->dma_current_src) != GB_BUS_RAM && addr >= 0xC000) {
@@ -783,7 +785,7 @@ uint8_t GB_read_memory(GB_gameboy_t *gb, uint16_t addr)
             addr = (gb->dma_current_src - 1);
         }
     }
-    uint8_t data = read_map[addr >> 12](gb, addr);
+    data = read_map[addr >> 12](gb, addr);
     GB_apply_cheat(gb, addr, &data);
     if (unlikely(gb->read_memory_callback)) {
         data = gb->read_memory_callback(gb, addr, data);
@@ -800,6 +802,12 @@ uint8_t GB_read_memory(GB_gameboy_t *gb, uint16_t addr)
             gb->data_bus_decay_countdown = gb->data_bus_decay;
         }
     }
+ret:
+#ifdef ENABLE_BAP_FRAMES
+	if (!gb->debug_stopped && gb->trace && gb->trace_frame_open) {
+		GB_trace_push_mem(gb, false, addr, data);
+	}
+#endif
     return data;
 }
 
@@ -1768,6 +1776,11 @@ void GB_write_memory(GB_gameboy_t *gb, uint16_t addr, uint8_t value)
     if (unlikely(gb->n_watchpoints)) {
         GB_debugger_test_write_watchpoint(gb, addr, value);
     }
+#endif
+#ifdef ENABLE_BAP_FRAMES
+	if (!gb->debug_stopped && gb->trace && gb->trace_frame_open) {
+		GB_trace_push_mem(gb, true, addr, value);
+	}
 #endif
     if (bus_for_addr(gb, addr) == GB_BUS_MAIN && addr < 0xFF00) {
         gb->data_bus = value;
