@@ -1636,6 +1636,12 @@ static void trace_dump_regs(GB_gameboy_t *gb, bool post)
     if (!post || (gb->hl & 0xff) != (gb->trace_regs_pre.hl & 0xff)) {
         GB_trace_push_reg(gb, post, "l", gb->hl & 0xff, 8);
     }
+    // ime_toggle is to enable ime at the start of the next instruction
+    // for RzIL, it does not make any difference
+    uint8_t ime = gb->ime || gb->ime_toggle;
+    if (!post || ime != gb->trace_regs_pre.ime) {
+        GB_trace_push_reg(gb, post, "ime", ime, 1);
+    }
     GB_trace_push_reg(gb, post, "pc", gb->pc, 16);
     if (!post || gb->sp != gb->trace_regs_pre.sp) {
         GB_trace_push_reg(gb, post, "sp", gb->sp, 16);
@@ -1801,14 +1807,22 @@ void GB_cpu_run(GB_gameboy_t *gb)
                op[i] = GB_read_memory(gb, gb->pc - 1 + i);
            }
            memcpy(gb->trace_regs_pre.registers, gb->registers, sizeof(gb->registers));
+           gb->trace_regs_pre.ime = gb->ime;
            GB_trace_frame_begin(gb, gb->pc - 1, op, opsize);
            gb->trace_frame_open = true;
            trace_dump_regs(gb, false);
+           if (opcode == 0x10) {
+               // stop instruction can have a lot of effects from outside,
+               // which do not make sense to be traced, so write it like a nop.
+               trace_dump_regs(gb, true);
+               gb->trace_frame_open = false;
+               GB_trace_frame_end(gb);
+           }
         }
 #endif
         opcodes[opcode](gb, opcode);
 #ifdef ENABLE_BAP_FRAMES
-        if (gb->trace) {
+        if (gb->trace && opcode != 0x10) {
             trace_dump_regs(gb, true);
             gb->trace_frame_open = false;
             GB_trace_frame_end(gb);

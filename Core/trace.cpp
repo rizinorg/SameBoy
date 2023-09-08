@@ -144,7 +144,7 @@ extern "C" void GB_trace_push_reg(GB_gameboy_t *gb, bool post, const char *name,
     i->set_allocated_operand_usage(u);
     i->set_allocated_taint_info(ti);
     uint8_t va[2] = { (uint8_t)v, (uint8_t)(v >> 8) };
-    i->set_value(std::string((const char *)va, bits / 8));
+    i->set_value(std::string((const char *)va, (bits + 7) / 8));
 }
 
 extern "C" void GB_trace_push_mem(GB_gameboy_t *gb, bool post, uint16_t addr, uint8_t val)

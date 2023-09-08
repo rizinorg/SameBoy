@@ -793,16 +793,19 @@ struct GB_gameboy_internal_s {
 #ifdef ENABLE_BAP_FRAMES
         GB_trace_state_t *trace;
         bool trace_frame_open;
-        union {
-            uint16_t registers[GB_REGISTERS_16_BIT];
-            struct {
-                uint16_t af,
-                         bc,
-                         de,
-                         hl,
-                         sp,
-                         pc;
+        struct {
+            union {
+                uint16_t registers[GB_REGISTERS_16_BIT];
+                struct {
+                    uint16_t af,
+                             bc,
+                             de,
+                             hl,
+                             sp,
+                             pc;
+                };
             };
+            uint8_t ime;
         } trace_regs_pre;
 #endif
                
